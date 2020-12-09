@@ -1,0 +1,656 @@
+{-# START_FILE .gitignore #-}
+dist/
+dist-newstyle/
+cabal.project.local
+result
+*~
+
+{-# START_FILE hie.yaml #-}
+# cradle:
+#     stack:
+#         - path: "./src"
+#           component: "{{name}}:lib"
+#         - path: "./app"
+#           component: "{{name}}:exe:{{name}}"
+#         - path: "./test"
+#           component: "{{name}}:test:{{name}}-tests"
+cradle:
+    cabal:
+        - path: "./src"
+          component: "lib:{{name}}"
+        - path: "./app"
+          component: "exe:{{name}}"
+        - path: "./test"
+          component: "test:{{name}}-tests"
+
+{-# START_FILE LICENSE #-}
+MIT License
+
+Copyright (c) 2020 Arnau Abella
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+{-# START_FILE default.nix #-}
+{ nixpkgs     ? import ./nix/nixpkgs.nix {}
+, compiler    ? "ghc884"
+, doBenchmark ? true
+}:
+
+let
+
+  inherit (nixpkgs) pkgs;
+
+  baseHaskellPackages =
+    if compiler == "default"
+    then pkgs.haskellPackages
+    else pkgs.haskell.packages.${compiler};
+
+  readDirectory = import ./nix/readDirectory.nix;
+
+  haskellPackages =
+    let
+      manualOverrides = haskellPackagesNew: haskellPackagesOld: {
+         # Add manual overrides.
+         # Example:
+         #   Diff = pkgs.haskell.lib.dontCheck haskellPackagesOld.Diff;
+      };
+    in
+      baseHaskellPackages.override {
+        overrides = pkgs.lib.composeExtensions ( readDirectory ./nix/sources ) manualOverrides;
+      };
+
+  doBench  = if doBenchmark then pkgs.haskell.lib.doBenchmark else pkgs.lib.id;
+  doStatic = pkgs.haskell.lib.justStaticExecutables;
+in
+  doStatic (
+    doBench (
+      haskellPackages.callCabal2nix "{{name}}" ./. {}
+    )
+  )
+
+{-# START_FILE {{name}}.cabal #-}
+cabal-version:       >= 1.10
+
+name:                {{name}}
+version:             0.1.0.0
+build-type:          Simple
+license:             MIT
+license-file:        LICENSE
+author:              Arnau Abella
+maintainer:          arnauabella@gmail.com
+copyright:           2020 Arnau Abella
+homepage:            https://github.com/monadplus/{{name}}
+bug-reports:         https://github.com/monadplus/{{name}}/issues
+synopsis:            {{synopsis}}
+description:         {{description}}
+category:            {{category}}
+extra-source-files:  README.md
+                     CHANGELOG.md
+tested-with:         GHC == 8.8.4
+
+source-repository head
+  type:                git
+  location:            https://github.com/monadplus/{{name}}.git
+
+Executable {{name}}
+  default-language:      Haskell2010
+  main-is:               Main.hs
+  hs-source-dirs:        app
+
+  build-depends:         {{name}},
+                         base >=4.12 && <4.15
+
+  ghc-options:           -O2 -threaded -rtsopts -with-rtsopts=-N
+
+Library
+  default-language:   Haskell2010
+  hs-source-dirs:     src
+
+  exposed-modules:    Lib
+
+  other-modules:      Lib.Internal
+
+  build-depends:      base           >=4.12     && <4.15,
+                      bytestring     >=0.10.8.2 && <0.11.0.0,
+                      containers     >=0.5.0.1  && <0.7,
+                      deepseq        >=1.4      && <1.5,
+                      text           >=1.2.3.0  && <2.0.0.0
+
+  ghc-options:        -Wall
+                      -Wincomplete-uni-patterns
+                      -Wincomplete-record-updates
+                      -Wcompat
+                      -Widentities
+                      -Wredundant-constraints
+                      -Wpartial-fields
+                      -fhide-source-paths
+                      -freverse-errors
+  if impl(ghc >= 8.8.1)
+    ghc-options:      -Wmissing-deriving-strategies
+                      -Werror=missing-deriving-strategies
+
+  default-extensions: AllowAmbiguousTypes
+                      BangPatterns
+                      ConstraintKinds
+                      DataKinds
+                      DefaultSignatures
+                      DeriveAnyClass
+                      DeriveDataTypeable
+                      DeriveFoldable
+                      DeriveFunctor
+                      DeriveGeneric
+                      DeriveTraversable
+                      DerivingStrategies
+                      DerivingVia
+                      DuplicateRecordFields
+                      EmptyCase
+                      EmptyDataDecls
+                      FlexibleContexts
+                      FlexibleInstances
+                      FunctionalDependencies
+                      GADTs
+                      GeneralizedNewtypeDeriving
+                      InstanceSigs
+                      KindSignatures
+                      LambdaCase
+                      NamedFieldPuns
+                      OverloadedStrings
+                      PolyKinds
+                      QuasiQuotes
+                      RankNTypes
+                      RecordWildCards
+                      ScopedTypeVariables
+                      StandaloneDeriving
+                      TemplateHaskell
+                      TupleSections
+                      TypeApplications
+                      TypeFamilies
+                      TypeOperators
+                      UndecidableInstances
+                      RoleAnnotations
+
+Test-suite {{name}}-tests
+  default-language:     Haskell2010
+  type:                 exitcode-stdio-1.0
+  main-is:              Spec.hs
+  hs-source-dirs:       test
+
+  other-modules:
+
+  build-depends:        {{name}},
+                        base              >=4.12     && <4.15,
+                        hspec             >=2.6.0    && <2.8,
+                        hspec-core        >=2.6.0    && <2.8,
+                        QuickCheck        >=2.12     && <2.14
+
+  ghc-options:          -Wall
+                        -Wincomplete-uni-patterns
+                        -Wincomplete-record-updates
+                        -Wcompat
+                        -Widentities
+                        -Wredundant-constraints
+                        -Wpartial-fields
+                        -fhide-source-paths
+                        -freverse-errors
+  if impl(ghc >= 8.8.1)
+    ghc-options:        -Wmissing-deriving-strategies
+                        -Werror=missing-deriving-strategies
+
+  default-extensions:   AllowAmbiguousTypes
+                        BangPatterns
+                        ConstraintKinds
+                        DataKinds
+                        DefaultSignatures
+                        DeriveAnyClass
+                        DeriveDataTypeable
+                        DeriveFoldable
+                        DeriveFunctor
+                        DeriveGeneric
+                        DeriveTraversable
+                        DerivingStrategies
+                        DerivingVia
+                        DuplicateRecordFields
+                        EmptyCase
+                        EmptyDataDecls
+                        FlexibleContexts
+                        FlexibleInstances
+                        FunctionalDependencies
+                        GADTs
+                        GeneralizedNewtypeDeriving
+                        InstanceSigs
+                        KindSignatures
+                        LambdaCase
+                        NamedFieldPuns
+                        OverloadedStrings
+                        PolyKinds
+                        QuasiQuotes
+                        RankNTypes
+                        RecordWildCards
+                        ScopedTypeVariables
+                        StandaloneDeriving
+                        TemplateHaskell
+                        TupleSections
+                        TypeApplications
+                        TypeFamilies
+                        TypeOperators
+                        UndecidableInstances
+                        RoleAnnotations
+
+
+Test-suite {{name}}-doctest
+  default-language:    Haskell2010
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Doctest.hs
+
+  build-depends:       base     >=4.12 && <4.15,
+                       doctest  >=0.16 && <0.17,
+                       Glob     >=0.9  && <0.11
+
+  ghc-options:         -Wall
+                       -Wincomplete-uni-patterns
+                       -Wincomplete-record-updates
+                       -Wcompat
+                       -Widentities
+                       -Wredundant-constraints
+                       -Wpartial-fields
+                       -fhide-source-paths
+                       -freverse-errors
+
+                       -threaded
+  if impl(ghc >= 8.8.1)
+    ghc-options:       -Wmissing-deriving-strategies
+                       -Werror=missing-deriving-strategies
+
+
+
+Benchmark {{name}}-bench
+  default-language: Haskell2010
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: benchmark
+  main-is:        Benchmark.hs
+
+  build-depends:  {{name}},
+                  base      >=4.12     && <4.15,
+                  gauge     >=0.2.4    && <0.3
+
+  ghc-options:    -Wall
+                  -Wincomplete-uni-patterns
+                  -Wincomplete-record-updates
+                  -Wcompat
+                  -Widentities
+                  -Wredundant-constraints
+                  -Wpartial-fields
+                  -fhide-source-paths
+                  -freverse-errors
+
+                  -O2
+                  -threaded
+                  -rtsopts
+                  -with-rtsopts=-N
+  if impl(ghc >= 8.8.1)
+    ghc-options:  -Wmissing-deriving-strategies
+                  -Werror=missing-deriving-strategies
+
+{-# START_FILE test/Doctest.hs #-}
+module Main (main) where
+
+import System.FilePath.Glob (glob)
+import Test.DocTest         (doctest)
+
+main :: IO ()
+main = do
+    sourceFiles <- glob "src/**/*.hs"
+    doctest
+        $ "-XAllowAmbiguousTypes"
+        : "-XBangPatterns"
+        : "-XConstraintKinds"
+        : "-XDataKinds"
+        : "-XDefaultSignatures"
+        : "-XDeriveAnyClass"
+        : "-XDeriveDataTypeable"
+        : "-XDeriveFoldable"
+        : "-XDeriveFunctor"
+        : "-XDeriveGeneric"
+        : "-XDeriveTraversable"
+        : "-XDerivingStrategies"
+        : "-XDerivingVia"
+        : "-XDuplicateRecordFields"
+        : "-XEmptyCase"
+        : "-XEmptyDataDecls"
+        : "-XFlexibleContexts"
+        : "-XFlexibleInstances"
+        : "-XFunctionalDependencies"
+        : "-XGADTs"
+        : "-XGeneralizedNewtypeDeriving"
+        : "-XInstanceSigs"
+        : "-XKindSignatures"
+        : "-XLambdaCase"
+        : "-XNamedFieldPuns"
+        : "-XOverloadedStrings"
+        : "-XPolyKinds"
+        : "-XQuasiQuotes"
+        : "-XRankNTypes"
+        : "-XRecordWildCards"
+        : "-XScopedTypeVariables"
+        : "-XStandaloneDeriving"
+        : "-XTemplateHaskell"
+        : "-XTupleSections"
+        : "-XTypeApplications"
+        : "-XTypeFamilies"
+        : "-XTypeOperators"
+        : "-XUndecidableInstances"
+        : "-XRoleAnnotations"
+        : sourceFiles
+
+
+{-# START_FILE README.md #-}
+### {{name}}
+
+{-# START_FILE Setup.hs #-}
+import Distribution.Simple
+main = defaultMain
+
+{-# START_FILE shell.nix #-}
+{ nixpkgs     ? import ./nix/nixpkgs.nix {}
+, compiler    ? "ghc884"
+, doBenchmark ? true
+}:
+let
+  inherit (nixpkgs) pkgs;
+  env = (import ./default.nix { inherit nixpkgs compiler doBenchmark; }).env;
+in
+  env.overrideAttrs (oldAttrs: {
+    buildInputs = with pkgs.haskellPackages; oldAttrs.buildInputs ++ [
+      cabal-install cabal2nix ghcid
+    ];
+  })
+
+{-# START_FILE app/Main.hs #-}
+module Main where
+
+main :: IO ()
+main = putStrLn "Hello, Haskell!"
+
+{-# START_FILE src/Lib.hs #-}
+module Lib where
+
+todo :: IO ()
+todo = putStrLn "TODO"
+
+{-# START_FILE src/Lib/Internal.hs #-}
+module Lib.Internal (
+    mystery
+  ) where
+
+-- $setup
+-- >>> import Data.Monoid
+
+-- |
+-- >>> mystery 5
+-- 5
+--
+-- >>> mystery 3
+-- 0
+mystery :: Int -> Int
+mystery x = case x of
+  5 -> 5
+  _ -> 0
+
+{-# START_FILE nix/nixpkgs.json #-}
+{
+  "url": "https://github.com/NixOS/nixpkgs",
+  "rev": "998ac52f0acaa3686a5fff6ff9f6f735ebb66d32",
+  "date": "2020-05-01T13:12:02+02:00",
+  "sha256": "18gzp7s583flhwrwcx0dfvfxgi72vld6pmkv1l0rsc2vg3fbfdc2",
+  "fetchSubmodules": false
+}
+
+{-# START_FILE nix/nixpkgs.nix #-}
+{ fp ? ./nixpkgs.json }:
+
+let
+  nixpkgsJson = builtins.fromJSON (builtins.readFile fp);
+  nixpkgsFunc = import (builtins.fetchTarball (with nixpkgsJson; {
+    url = "${url}/archive/${rev}.tar.gz";
+    inherit sha256;
+  }));
+in
+  nixpkgsFunc {}
+{-# START_FILE nix/readDirectory.nix #-}
+directory:
+
+haskellPackagesNew: haskellPackagesOld:
+  let
+    pkgs = import <nixpkgs> {};
+
+    isNixFile = path: pkgs.lib.strings.hasSuffix ".nix" path;
+
+    filterDirectory = dir: builtins.filterSource (path: type: type == "regular" && isNixFile (baseNameOf path) ) dir;
+
+    haskellPaths = builtins.attrNames (builtins.readDir (filterDirectory directory));
+
+    toKeyVal = file: {
+      name  = builtins.replaceStrings [ ".nix" ] [ "" ] file;
+
+      value = haskellPackagesNew.callPackage (directory + "/${file}") { };
+    };
+
+  in
+    builtins.listToAttrs (map toKeyVal haskellPaths)
+
+{-# START_FILE nix/update.bash #-}
+#!/usr/bin/env nix-shell
+#!nix-shell -i bash -p nix-prefetch-git
+
+nix-prefetch-git https://github.com/NixOS/nixpkgs > nixpkgs.json
+
+{-# START_FILE nix/sources/.gitkeep #-}
+
+{-# START_FILE test/Spec.hs #-}
+module Main (main) where
+
+import           System.IO  (hSetEncoding, stderr, stdout, utf8)
+import           Test.Hspec (Spec, hspec)
+
+main :: IO ()
+main = do
+    hSetEncoding stdout utf8
+    hSetEncoding stderr utf8
+
+    hspec allUnitTests
+
+allUnitTests :: Spec
+allUnitTests = undefined
+
+{-# START_FILE CHANGELOG.md #-}
+# Changelog
+
+`{{name}}` uses [PVP Versioning][1].
+The changelog is available [on GitHub][2].
+
+## 0.1.0.0 — Unreleased
+
+* Work in progress.
+
+[1]: https://pvp.haskell.org
+[2]: https://github.com/monadplus/{{name}}/releases
+
+{-# START_FILE .hlint.yaml #-}
+- ignore: {name: "Use camelCase"}
+
+- arguments:
+  - -XTypeApplications
+
+- warn: {name: "Use explicit module export list"}
+
+{-# START_FILE stack.yaml #-}
+resolver: lts-16.25
+extra-deps: []
+
+{-# START_FILE benchmark/Benchmark.hs #-}
+import           Gauge.Main
+
+main :: IO ()
+main = defaultMain []
+
+{-# START_FILE .travis.yml #-}
+sudo: true
+language: haskell
+
+git:
+  depth: 5
+
+cabal: "3.0"
+
+cache:
+  directories:
+  - "$HOME/.cabal/store"
+  - "$HOME/.stack"
+  - "$TRAVIS_BUILD_DIR/.stack-work"
+
+matrix:
+  include:
+
+  # Cabal
+  - ghc: 8.6.5
+  - ghc: 8.8.3
+  - ghc: 8.10.1
+
+  # stack
+  - ghc: 8.8.3
+  - ghc: 8.10.1
+    env: STACK_YAML="$TRAVIS_BUILD_DIR/stack.yaml"
+
+install:
+  - |
+    if [ -z "$STACK_YAML" ]; then
+      cabal build --enable-tests --enable-benchmarks --write-ghc-environment-files=always
+    else
+      # install stack
+      curl -sSL https://get.haskellstack.org/ | sh
+
+      # build project with stack
+      stack --version
+      stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks
+    fi
+
+script:
+  - |
+    if [ -z "$STACK_YAML" ]; then
+      cabal haddock
+      cabal test all --enable-tests
+    else
+      stack test --system-ghc
+    fi
+
+notifications:
+  email: false
+
+{-# START_FILE .github/CODEOWNERS #-}
+*  @monadplus
+
+{-# START_FILE .github/workflows/ci.yml #-}
+name: CI
+
+# Trigger the workflow on push or pull request, but only for the master branch
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  cabal:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        cabal: ["3.2"]
+        ghc:
+          - "8.6.5"
+          - "8.8.3"
+          - "8.10.1"
+        exclude:
+          - os: macOS-latest
+            ghc: 8.8.3
+          - os: macOS-latest
+            ghc: 8.6.5
+          - os: windows-latest
+            ghc: 8.8.3
+          - os: windows-latest
+            ghc: 8.6.5
+
+    steps:
+    - uses: actions/checkout@v2
+      if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
+
+    - uses: actions/setup-haskell@v1.1
+      id: setup-haskell-cabal
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
+
+    - uses: actions/cache@v1
+      name: Cache cabal-store
+      with:
+        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+        key: ${{ runner.os }}-${{ matrix.ghc }}-cabal
+
+    - name: Build
+      run: |
+        cabal update
+        cabal build all --enable-tests --enable-benchmarks --write-ghc-environment-files=always
+
+    - name: Test
+      run: |
+        cabal test all --enable-tests
+
+  stack:
+    name: stack / ghc ${{ matrix.ghc }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: ["2.1.3"]
+        ghc: ["8.8.3"]
+
+    steps:
+    - uses: actions/checkout@v2
+      if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
+
+    - uses: actions/setup-haskell@v1.1
+      name: Setup Haskell Stack
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        stack-version: ${{ matrix.stack }}
+
+    - uses: actions/cache@v1
+      name: Cache ~/.stack
+      with:
+        path: ~/.stack
+        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
+
+    - name: Build
+      run: |
+        stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks
+
+    - name: Test
+      run: |
+        stack test --system-ghc
