@@ -1,0 +1,799 @@
+{-# START_FILE .gitignore #-}
+# Haskell
+*.o
+*.hi
+*.chi
+*.chs.h
+*.dyn_o
+*.dyn_hi
+*.prof
+*.aux
+*.hp
+*.eventlog
+.virtualenv
+.hsenv
+.hpc
+.ghc.environment*
+
+# Cabal
+dist
+dist-*
+cabal-dev
+.cabal-sandbox/
+cabal.sandbox.config
+cabal.config
+cabal.project.local
+
+# Stack
+.stack-work/
+
+# Nix
+result
+
+# Others
+*~
+.DS_Store
+
+{-# START_FILE hie.yaml #-}
+# cradle:
+#     stack:
+#         - path: "./src"
+#           component: "{{name}}:lib"
+#         - path: "./app"
+#           component: "{{name}}:exe:{{name}}"
+#         - path: "./benchmark"
+#           component: "{{name}}:bench:{{name}}-bench"
+#         - path: "./test"
+#           component: "{{name}}:test:{{name}}-tests"
+cradle:
+    cabal:
+        - path: "./src"
+          component: "lib:{{name}}"
+        - path: "./app"
+          component: "exe:{{name}}"
+        - path: "./benchmark"
+          component: "bench:{{name}}-bench"
+        - path: "./test"
+          component: "test:{{name}}-tests"
+
+{-# START_FILE LICENSE #-}
+MIT License
+
+Copyright (c) 2021 Arnau Abella
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+{-# START_FILE default.nix #-}
+{ sources ? import ./nix/sources.nix, nixpkgs ? import sources.nixpkgs {
+  overlays = [ ];
+  config = { };
+}, compiler ? "ghc8107", doBenchmark ? false }:
+
+let
+  inherit (nixpkgs) pkgs;
+
+  baseHaskellPackages = if compiler == "default" then
+    pkgs.haskellPackages
+  else
+    pkgs.haskell.packages.${compiler};
+
+  gitignoreSource = (import (sources."gitignore.nix") {}).gitignoreSource;
+
+  readDirectory = import ./nix/readDirectory.nix;
+
+  haskellPackages = let
+    manualOverrides = haskellPackagesNew: haskellPackagesOld:
+      {
+        # Add manual overrides.
+        # Example:
+        #   Diff = pkgs.haskell.lib.dontCheck haskellPackagesOld.Diff;
+      };
+  in baseHaskellPackages.override {
+    overrides =
+      pkgs.lib.composeExtensions (readDirectory ./nix/sources) manualOverrides;
+  };
+
+  doBench = if doBenchmark then pkgs.haskell.lib.doBenchmark else pkgs.lib.id;
+  doStatic = pkgs.haskell.lib.justStaticExecutables;
+in doStatic
+(doBench (haskellPackages.callCabal2nix "{{name}}" (gitignoreSource ./.) { }))
+
+{-# START_FILE cabal.project.local #-}
+-- gauge depends on basement,
+-- basement documentation is broken
+package basement
+  documentation: False
+
+{-# START_FILE {{name}}.cabal #-}
+cabal-version:       3.0
+name:                {{name}}
+version:             0.1.0.0
+synopsis:            {{synopsis}}{{^synopsis}}Fill the synopsis{{/synopsis}}
+description:         {{description}}{{^description}}Fill the description{{/description}}
+homepage:            https://github.com/monadplus/{{name}}
+bug-reports:         https://github.com/monadplus/{{name}}/issues
+license:             MIT
+license-file:        LICENSE
+author:              Arnau Abella
+maintainer:          Arnau Abella <arnauabella@gmail.com>
+copyright:           2021-2022 Arnau Abella
+category:            {{category}}{{^category}}Experimental{{/category}}
+build-type:          Simple
+extra-doc-files:     README.md
+-- extra-source-files:
+                     CHANGELOG.md
+tested-with:         GHC == 8.10.7
+
+source-repository head
+  type:                git
+  location:            https://github.com/monadplus/{{name}}.git
+
+Common common-options
+  default-language:    Haskell2010
+  build-depends:       base ^>=4.14,
+  ghc-options:         -Wall
+                       -Wincomplete-uni-patterns
+                       -Wincomplete-record-updates
+                       -Wcompat
+                       -Widentities
+                       -Wredundant-constraints
+                       -Wpartial-fields
+                       -fhide-source-paths
+                       -freverse-errors
+  if impl(ghc >= 8.8.1)
+    ghc-options:       -Wmissing-deriving-strategies
+                       -Werror=missing-deriving-strategies
+
+
+Executable {{name}}
+  import:                common-options
+  main-is:               Main.hs
+  hs-source-dirs:        app
+
+  build-depends:         {{name}},
+
+  ghc-options:           -O2
+                         -threaded
+                         -rtsopts
+                         -with-rtsopts=-N
+
+Library
+  import:             common-options
+  hs-source-dirs:     src
+
+  exposed-modules:    Lib
+
+  other-modules:      Lib.Internal
+
+  build-depends:      bytestring     ^>=0.10,
+                      containers     ^>=0.6,
+                      text           ^>=1.2,
+
+Test-suite {{name}}-tests
+  import:               common-options
+  type:                 exitcode-stdio-1.0
+  main-is:              Spec.hs
+  hs-source-dirs:       test
+
+  other-modules:
+
+  build-depends:        {{name}},
+                        hspec             ^>=2.7,
+                        hspec-core        ^>=2.7,
+                        QuickCheck        ^>=2.14,
+
+Test-suite {{name}}-doctest
+  import:              common-options
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Doctest.hs
+
+  build-depends:       doctest  ^>=0.17,
+                       Glob     ^>=0.10,
+
+Benchmark {{name}}-bench
+  import:         common-options
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: benchmark
+  main-is:        Benchmark.hs
+
+  build-depends:  {{name}},
+                  gauge     ^>=0.2,
+
+{-# START_FILE test/Doctest.hs #-}
+module Main (main) where
+
+import System.FilePath.Glob (glob)
+import Test.DocTest         (doctest)
+
+main :: IO ()
+main = do
+    sourceFiles <- glob "src/**/*.hs"
+    doctest
+        $ "-XAllowAmbiguousTypes"
+        : "-XBangPatterns"
+        : "-XConstraintKinds"
+        : "-XDataKinds"
+        : "-XDefaultSignatures"
+        : "-XDeriveAnyClass"
+        : "-XDeriveDataTypeable"
+        : "-XDeriveFoldable"
+        : "-XDeriveFunctor"
+        : "-XDeriveGeneric"
+        : "-XDeriveTraversable"
+        : "-XDerivingStrategies"
+        : "-XDerivingVia"
+        : "-XDuplicateRecordFields"
+        : "-XEmptyCase"
+        : "-XEmptyDataDecls"
+        : "-XFlexibleContexts"
+        : "-XFlexibleInstances"
+        : "-XFunctionalDependencies"
+        : "-XGADTs"
+        : "-XGeneralizedNewtypeDeriving"
+        : "-XInstanceSigs"
+        : "-XKindSignatures"
+        : "-XLambdaCase"
+        : "-XNamedFieldPuns"
+        : "-XOverloadedStrings"
+        : "-XPolyKinds"
+        : "-XQuasiQuotes"
+        : "-XRankNTypes"
+        : "-XRecordWildCards"
+        : "-XScopedTypeVariables"
+        : "-XStandaloneDeriving"
+        : "-XTemplateHaskell"
+        : "-XTupleSections"
+        : "-XTypeApplications"
+        : "-XTypeFamilies"
+        : "-XTypeOperators"
+        : "-XUndecidableInstances"
+        : "-XRoleAnnotations"
+        : sourceFiles
+
+
+{-# START_FILE README.md #-}
+# {{name}}
+
+## Building the project
+
+Cabal v2:
+
+```sh
+cabal update && cabal build
+```
+
+Stack:
+
+```sh
+stack build
+```
+
+Nix:
+
+```sh
+# Executable at ./result/bin/
+nix-build
+```
+
+Development environment:
+
+```sh
+
+```
+
+## Running the project
+
+Cabal v2:
+
+```sh
+cabal run
+```
+
+Stack:
+
+```sh
+stack run
+```
+
+Nix:
+
+```sh
+nix-build && ./result/bin/{{name}}
+```
+
+## CI
+
+Disabled for now.
+
+Nix+cachix is missing in this old template.
+
+
+{-# START_FILE Setup.hs #-}
+import Distribution.Simple
+main = defaultMain
+
+{-# START_FILE shell.nix #-}
+let
+  sources = import ./nix/sources.nix;
+  nixpkgs = import sources.nixpkgs {
+    overlays = [ ];
+    config = { };
+  };
+  inherit (nixpkgs) pkgs;
+  env = (import ./default.nix { inherit sources nixpkgs; }).env;
+in env.overrideAttrs (oldAttrs: {
+  buildInputs = with pkgs.haskellPackages;
+    oldAttrs.buildInputs ++ [ cabal-install cabal2nix ghcid ];
+})
+
+{-# START_FILE app/Main.hs #-}
+module Main where
+
+main :: IO ()
+main = putStrLn "Hello, Haskell!"
+
+{-# START_FILE src/Lib.hs #-}
+module Lib where
+
+todo :: IO ()
+todo = putStrLn "TODO"
+
+{-# START_FILE src/Lib/Internal.hs #-}
+module Lib.Internal (
+    mystery
+  ) where
+
+-- $setup
+-- >>> import Data.Monoid
+
+-- |
+-- >>> mystery 5
+-- 5
+--
+-- >>> mystery 3
+-- 0
+mystery :: Int -> Int
+mystery x = case x of
+  5 -> 5
+  _ -> 0
+
+{-# START_FILE nix/sources.json #-}
+{
+    "gitignore.nix": {
+        "branch": "master",
+        "description": "Nix functions for filtering local git sources",
+        "homepage": "",
+        "owner": "hercules-ci",
+        "repo": "gitignore.nix",
+        "rev": "9e80c4d83026fa6548bc53b1a6fab8549a6991f6",
+        "sha256": "04n9chlpbifgc5pa3zx6ff3rji9am6msrbn1z3x1iinjz2xjfp4p",
+        "type": "tarball",
+        "url": "https://github.com/hercules-ci/gitignore.nix/archive/9e80c4d83026fa6548bc53b1a6fab8549a6991f6.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "niv": {
+        "branch": "master",
+        "description": "Easy dependency management for Nix projects",
+        "homepage": "https://github.com/nmattia/niv",
+        "owner": "nmattia",
+        "repo": "niv",
+        "rev": "65a61b147f307d24bfd0a5cd56ce7d7b7cc61d2e",
+        "sha256": "17mirpsx5wyw262fpsd6n6m47jcgw8k2bwcp1iwdnrlzy4dhcgqh",
+        "type": "tarball",
+        "url": "https://github.com/nmattia/niv/archive/65a61b147f307d24bfd0a5cd56ce7d7b7cc61d2e.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "nixpkgs": {
+        "branch": "nixpkgs-unstable",
+        "description": "Nix Packages collection",
+        "homepage": "",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ee084c02040e864eeeb4cf4f8538d92f7c675671",
+        "sha256": "1x8amcixdaw3ryyia32pb706vzhvn5whq9n8jin0qcha5qnm1fnh",
+        "type": "tarball",
+        "url": "https://github.com/NixOS/nixpkgs/archive/ee084c02040e864eeeb4cf4f8538d92f7c675671.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    }
+}
+
+{-# START_FILE nix/sources.nix #-}
+# This file has been generated by Niv.
+
+let
+
+  #
+  # The fetchers. fetch_<type> fetches specs of type <type>.
+  #
+
+  fetch_file = pkgs: name: spec:
+    let
+      name' = sanitizeName name + "-src";
+    in
+      if spec.builtin or true then
+        builtins_fetchurl { inherit (spec) url sha256; name = name'; }
+      else
+        pkgs.fetchurl { inherit (spec) url sha256; name = name'; };
+
+  fetch_tarball = pkgs: name: spec:
+    let
+      name' = sanitizeName name + "-src";
+    in
+      if spec.builtin or true then
+        builtins_fetchTarball { name = name'; inherit (spec) url sha256; }
+      else
+        pkgs.fetchzip { name = name'; inherit (spec) url sha256; };
+
+  fetch_git = name: spec:
+    let
+      ref =
+        if spec ? ref then spec.ref else
+          if spec ? branch then "refs/heads/${spec.branch}" else
+            if spec ? tag then "refs/tags/${spec.tag}" else
+              abort "In git source '${name}': Please specify `ref`, `tag` or `branch`!";
+    in
+      builtins.fetchGit { url = spec.repo; inherit (spec) rev; inherit ref; };
+
+  fetch_local = spec: spec.path;
+
+  fetch_builtin-tarball = name: throw
+    ''[${name}] The niv type "builtin-tarball" is deprecated. You should instead use `builtin = true`.
+        $ niv modify ${name} -a type=tarball -a builtin=true'';
+
+  fetch_builtin-url = name: throw
+    ''[${name}] The niv type "builtin-url" will soon be deprecated. You should instead use `builtin = true`.
+        $ niv modify ${name} -a type=file -a builtin=true'';
+
+  #
+  # Various helpers
+  #
+
+  # https://github.com/NixOS/nixpkgs/pull/83241/files#diff-c6f540a4f3bfa4b0e8b6bafd4cd54e8bR695
+  sanitizeName = name:
+    (
+      concatMapStrings (s: if builtins.isList s then "-" else s)
+        (
+          builtins.split "[^[:alnum:]+._?=-]+"
+            ((x: builtins.elemAt (builtins.match "\\.*(.*)" x) 0) name)
+        )
+    );
+
+  # The set of packages used when specs are fetched using non-builtins.
+  mkPkgs = sources: system:
+    let
+      sourcesNixpkgs =
+        import (builtins_fetchTarball { inherit (sources.nixpkgs) url sha256; }) { inherit system; };
+      hasNixpkgsPath = builtins.any (x: x.prefix == "nixpkgs") builtins.nixPath;
+      hasThisAsNixpkgsPath = <nixpkgs> == ./.;
+    in
+      if builtins.hasAttr "nixpkgs" sources
+      then sourcesNixpkgs
+      else if hasNixpkgsPath && ! hasThisAsNixpkgsPath then
+        import <nixpkgs> {}
+      else
+        abort
+          ''
+            Please specify either <nixpkgs> (through -I or NIX_PATH=nixpkgs=...) or
+            add a package called "nixpkgs" to your sources.json.
+          '';
+
+  # The actual fetching function.
+  fetch = pkgs: name: spec:
+
+    if ! builtins.hasAttr "type" spec then
+      abort "ERROR: niv spec ${name} does not have a 'type' attribute"
+    else if spec.type == "file" then fetch_file pkgs name spec
+    else if spec.type == "tarball" then fetch_tarball pkgs name spec
+    else if spec.type == "git" then fetch_git name spec
+    else if spec.type == "local" then fetch_local spec
+    else if spec.type == "builtin-tarball" then fetch_builtin-tarball name
+    else if spec.type == "builtin-url" then fetch_builtin-url name
+    else
+      abort "ERROR: niv spec ${name} has unknown type ${builtins.toJSON spec.type}";
+
+  # If the environment variable NIV_OVERRIDE_${name} is set, then use
+  # the path directly as opposed to the fetched source.
+  replace = name: drv:
+    let
+      saneName = stringAsChars (c: if isNull (builtins.match "[a-zA-Z0-9]" c) then "_" else c) name;
+      ersatz = builtins.getEnv "NIV_OVERRIDE_${saneName}";
+    in
+      if ersatz == "" then drv else
+        # this turns the string into an actual Nix path (for both absolute and
+        # relative paths)
+        if builtins.substring 0 1 ersatz == "/" then /. + ersatz else /. + builtins.getEnv "PWD" + "/${ersatz}";
+
+  # Ports of functions for older nix versions
+
+  # a Nix version of mapAttrs if the built-in doesn't exist
+  mapAttrs = builtins.mapAttrs or (
+    f: set: with builtins;
+    listToAttrs (map (attr: { name = attr; value = f attr set.${attr}; }) (attrNames set))
+  );
+
+  # https://github.com/NixOS/nixpkgs/blob/0258808f5744ca980b9a1f24fe0b1e6f0fecee9c/lib/lists.nix#L295
+  range = first: last: if first > last then [] else builtins.genList (n: first + n) (last - first + 1);
+
+  # https://github.com/NixOS/nixpkgs/blob/0258808f5744ca980b9a1f24fe0b1e6f0fecee9c/lib/strings.nix#L257
+  stringToCharacters = s: map (p: builtins.substring p 1 s) (range 0 (builtins.stringLength s - 1));
+
+  # https://github.com/NixOS/nixpkgs/blob/0258808f5744ca980b9a1f24fe0b1e6f0fecee9c/lib/strings.nix#L269
+  stringAsChars = f: s: concatStrings (map f (stringToCharacters s));
+  concatMapStrings = f: list: concatStrings (map f list);
+  concatStrings = builtins.concatStringsSep "";
+
+  # https://github.com/NixOS/nixpkgs/blob/8a9f58a375c401b96da862d969f66429def1d118/lib/attrsets.nix#L331
+  optionalAttrs = cond: as: if cond then as else {};
+
+  # fetchTarball version that is compatible between all the versions of Nix
+  builtins_fetchTarball = { url, name ? null, sha256 }@attrs:
+    let
+      inherit (builtins) lessThan nixVersion fetchTarball;
+    in
+      if lessThan nixVersion "1.12" then
+        fetchTarball ({ inherit url; } // (optionalAttrs (!isNull name) { inherit name; }))
+      else
+        fetchTarball attrs;
+
+  # fetchurl version that is compatible between all the versions of Nix
+  builtins_fetchurl = { url, name ? null, sha256 }@attrs:
+    let
+      inherit (builtins) lessThan nixVersion fetchurl;
+    in
+      if lessThan nixVersion "1.12" then
+        fetchurl ({ inherit url; } // (optionalAttrs (!isNull name) { inherit name; }))
+      else
+        fetchurl attrs;
+
+  # Create the final "sources" from the config
+  mkSources = config:
+    mapAttrs (
+      name: spec:
+        if builtins.hasAttr "outPath" spec
+        then abort
+          "The values in sources.json should not have an 'outPath' attribute"
+        else
+          spec // { outPath = replace name (fetch config.pkgs name spec); }
+    ) config.sources;
+
+  # The "config" used by the fetchers
+  mkConfig =
+    { sourcesFile ? if builtins.pathExists ./sources.json then ./sources.json else null
+    , sources ? if isNull sourcesFile then {} else builtins.fromJSON (builtins.readFile sourcesFile)
+    , system ? builtins.currentSystem
+    , pkgs ? mkPkgs sources system
+    }: rec {
+      # The sources, i.e. the attribute set of spec name to spec
+      inherit sources;
+
+      # The "pkgs" (evaluated nixpkgs) to use for e.g. non-builtin fetchers
+      inherit pkgs;
+    };
+
+in
+mkSources (mkConfig {}) // { __functor = _: settings: mkSources (mkConfig settings); }
+
+{-# START_FILE nix/readDirectory.nix #-}
+directory:
+
+haskellPackagesNew: haskellPackagesOld:
+  let
+    pkgs = import <nixpkgs> {};
+
+    isNixFile = path: pkgs.lib.strings.hasSuffix ".nix" path;
+
+    filterDirectory = dir: builtins.filterSource (path: type: type == "regular" && isNixFile (baseNameOf path) ) dir;
+
+    haskellPaths = builtins.attrNames (builtins.readDir (filterDirectory directory));
+
+    toKeyVal = file: {
+      name  = builtins.replaceStrings [ ".nix" ] [ "" ] file;
+
+      value = haskellPackagesNew.callPackage (directory + "/${file}") { };
+    };
+
+  in
+    builtins.listToAttrs (map toKeyVal haskellPaths)
+
+{-# START_FILE nix/sources/.gitkeep #-}
+
+{-# START_FILE test/Spec.hs #-}
+module Main (main) where
+
+import           System.IO  (hSetEncoding, stderr, stdout, utf8)
+import           Test.Hspec (Spec, hspec)
+
+main :: IO ()
+main = do
+    hSetEncoding stdout utf8
+    hSetEncoding stderr utf8
+
+    hspec allUnitTests
+
+allUnitTests :: Spec
+allUnitTests = undefined
+
+{-# START_FILE CHANGELOG.md #-}
+# Changelog
+
+`{{name}}` uses [PVP Versioning][1].
+The changelog is available [on GitHub][2].
+
+## 0.1.0.0 — Unreleased
+
+* Work in progress.
+
+[1]: https://pvp.haskell.org
+[2]: https://github.com/monadplus/{{name}}/releases
+
+{-# START_FILE stack.yaml #-}
+resolver: lts-18.13
+extra-deps: []
+
+{-# START_FILE benchmark/Benchmark.hs #-}
+import           Gauge.Main
+
+main :: IO ()
+main = defaultMain []
+
+{-# START_FILE .travis.yml #-}
+sudo: true
+language: haskell
+
+git:
+  depth: 5
+
+cabal: "3.0"
+
+cache:
+  directories:
+  - "$HOME/.cabal/store"
+  - "$HOME/.stack"
+  - "$TRAVIS_BUILD_DIR/.stack-work"
+
+matrix:
+  include:
+
+  # Cabal
+  - ghc: 8.6.5
+  - ghc: 8.8.3
+  - ghc: 8.10.1
+
+  # stack
+  - ghc: 8.8.3
+  - ghc: 8.10.1
+    env: STACK_YAML="$TRAVIS_BUILD_DIR/stack.yaml"
+
+install:
+  - |
+    if [ -z "$STACK_YAML" ]; then
+      cabal build --enable-tests --enable-benchmarks --write-ghc-environment-files=always
+    else
+      # install stack
+      curl -sSL https://get.haskellstack.org/ | sh
+
+      # build project with stack
+      stack --version
+      stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks
+    fi
+
+script:
+  - |
+    if [ -z "$STACK_YAML" ]; then
+      cabal haddock
+      cabal test all --enable-tests
+    else
+      stack test --system-ghc
+    fi
+
+notifications:
+  email: false
+
+{-# START_FILE .github/CODEOWNERS #-}
+*  @monadplus
+
+{-# START_FILE .github/workflows/ci.yml #-}
+name: CI
+
+# Trigger the workflow on push or pull request, but only for the master branch
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  cabal:
+    name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+        cabal: ["3.2"]
+        ghc:
+          - "8.6.5"
+          - "8.8.3"
+          - "8.10.1"
+        exclude:
+          - os: macOS-latest
+            ghc: 8.8.3
+          - os: macOS-latest
+            ghc: 8.6.5
+          - os: windows-latest
+            ghc: 8.8.3
+          - os: windows-latest
+            ghc: 8.6.5
+
+    steps:
+    - uses: actions/checkout@v2
+      if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
+
+    - uses: actions/setup-haskell@v1.1
+      id: setup-haskell-cabal
+      name: Setup Haskell
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        cabal-version: ${{ matrix.cabal }}
+
+    - uses: actions/cache@v1
+      name: Cache cabal-store
+      with:
+        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+        key: ${{ runner.os }}-${{ matrix.ghc }}-cabal
+
+    - name: Build
+      run: |
+        cabal update
+        cabal build all --enable-tests --enable-benchmarks --write-ghc-environment-files=always
+
+    - name: Test
+      run: |
+        cabal test all --enable-tests
+
+  stack:
+    name: stack / ghc ${{ matrix.ghc }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: ["2.1.3"]
+        ghc: ["8.8.3"]
+
+    steps:
+    - uses: actions/checkout@v2
+      if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
+
+    - uses: actions/setup-haskell@v1.1
+      name: Setup Haskell Stack
+      with:
+        ghc-version: ${{ matrix.ghc }}
+        stack-version: ${{ matrix.stack }}
+
+    - uses: actions/cache@v1
+      name: Cache ~/.stack
+      with:
+        path: ~/.stack
+        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
+
+    - name: Build
+      run: |
+        stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks
+
+    - name: Test
+      run: |
+        stack test --system-ghc

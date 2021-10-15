@@ -1,19 +1,13 @@
-# Templates for Haskell Projects
+# Templates for Haskell
 
-This project uses [stack-templates](https://github.com/commercialhaskell/stack-templates) to create a haskell project from a description.
+## Simple
 
-## Templates
-
-- [cabal-stack](./cabal-stack.hsfiles): cabal + stack
-- [cabal-stack-ci](./cabal-stack-nix-ci.hsfiles): cabal + stack + travisCI + githubActions
-- [cabal-stack-nix-ci](./cabal-stack-nix-ci.hsfiles): cabal + stack + nix + travisCI + githubActions
-
-## How-to
-
-In order to create a new project from this template:
+This template includes a project skeleton integrated with:
+- Cabal
+- Stack
+- Nix
+- Github Actions
 
 ```bash
-git clone git@github.com:monadplus/haskell-templates.git
-
-stack new <project-name> <template-name> -p "synopsis:???" -p "description:???" -p "category:???"
+stack new <project-name> github:monadplus/basic
 ```
