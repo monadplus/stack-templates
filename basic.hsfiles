@@ -115,8 +115,6 @@ in doStatic
 (doBench (haskellPackages.callCabal2nix "{{name}}" (gitignoreSource ./.) { }))
 
 {-# START_FILE cabal.project.local #-}
-packages: .
-
 -- gauge depends on basement,
 -- basement documentation is broken
 package basement
