@@ -668,6 +668,7 @@ main = defaultMain []
 *  @monadplus
 
 {-# START_FILE .github/workflows/ci.yml #-}
+{{=<% %>=}}
 # Credit to kowainik for the original template
 name: CI
 
@@ -786,6 +787,7 @@ jobs:
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: nix-build | cachix push monadplus
     - run: nix-shell --run "echo OK"
+<%={{ }}=%>
 
 {-# START_FILE .github/dependabot.yml #-}
 # Keep github actions up to date with automatic pull requests from the bot.
