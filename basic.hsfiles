@@ -35,16 +35,6 @@ result
 .DS_Store
 
 {-# START_FILE hie.yaml #-}
-# cradle:
-#     stack:
-#         - path: "./src"
-#           component: "{{name}}:lib"
-#         - path: "./app"
-#           component: "{{name}}:exe:{{name}}"
-#         - path: "./benchmark"
-#           component: "{{name}}:bench:{{name}}-bench"
-#         - path: "./test"
-#           component: "{{name}}:test:{{name}}-tests"
 cradle:
     cabal:
         - path: "./src"
@@ -53,13 +43,15 @@ cradle:
           component: "exe:{{name}}"
         - path: "./benchmark"
           component: "bench:{{name}}-bench"
-        - path: "./test"
-          component: "test:{{name}}-tests"
+        - path: "./tasty"
+          component: "test:tasty"
+        - path: "./doctest"
+          component: "test:doctest"
 
 {-# START_FILE LICENSE #-}
 MIT License
 
-Copyright (c) 2021 Arnau Abella
+Copyright (c) 2022 Arnau Abella
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -171,6 +163,9 @@ Common common-options
   if impl(ghc >= 9.2)
     ghc-options:       -Wredundant-bang-patterns
                        -Woperator-whitespace
+  if impl(ghc >= 9.4)
+    ghc-options:       -Wredundant-strictness-flags
+
 
 Executable {{name}}
   import:                common-options
@@ -190,33 +185,37 @@ Library
 
   exposed-modules:    Lib
 
-  other-modules:      Lib.Internal
+  other-modules:
 
-  build-depends:      bytestring     >=0.10 && < 0.12,
-                      containers     ^>=0.6,
-                      text           ^>=1.2,
+  build-depends:      bytestring           >= 0.10 && <0.12,
+                      containers           ^>= 0.6,
+                      mtl                  ^>= 2.2,
+                      lens                 >= 4.9 && <5.2,
+                      text                 ^>= 1.2,
+                      unordered-containers ^>= 0.2,
 
-Test-suite {{name}}-tests
+Test-suite tasty
   import:               common-options
   type:                 exitcode-stdio-1.0
-  main-is:              Spec.hs
-  hs-source-dirs:       test
+  main-is:              Main.hs
+  hs-source-dirs:       tasty
 
   other-modules:
 
   build-depends:        {{name}},
-                        hspec             >=2.7 && <2.10,
-                        hspec-core        >=2.7 && <2.10,
-                        QuickCheck        ^>=2.14,
+                        tasty            ^>= 1.4,
+                        tasty-hunit      ^>= 0.10,
+                        tasty-hedgehog   ^>= 1.1,
+                        tasty-smallcheck ^>= 0.8,
 
-Test-suite foo-doctest
+
+Test-suite doctest
   import:              common-options
   type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             Doctest.hs
+  hs-source-dirs:      doctest
+  main-is:             Main.hs
+  build-depends:       doctest  >=0.17 && <0.21
 
-  build-depends:       doctest  >=0.17 && <0.21,
-                       Glob     ^>=0.10,
 
 Benchmark {{name}}-bench
   import:         common-options
@@ -227,114 +226,14 @@ Benchmark {{name}}-bench
   build-depends:  {{name}},
                   gauge     ^>=0.2,
 
-{-# START_FILE test/Doctest.hs #-}
-module Main (main) where
-
-import System.FilePath.Glob (glob)
-import Test.DocTest         (doctest)
+{-# START_FILE doctest/Main.hs #-}
+import qualified Test.DocTest
 
 main :: IO ()
-main = do
-    sourceFiles <- glob "src/**/*.hs"
-    doctest
-        $ "-XAllowAmbiguousTypes"
-        : "-XBangPatterns"
-        : "-XConstraintKinds"
-        : "-XDataKinds"
-        : "-XDefaultSignatures"
-        : "-XDeriveAnyClass"
-        : "-XDeriveDataTypeable"
-        : "-XDeriveFoldable"
-        : "-XDeriveFunctor"
-        : "-XDeriveGeneric"
-        : "-XDeriveTraversable"
-        : "-XDerivingStrategies"
-        : "-XDerivingVia"
-        : "-XDuplicateRecordFields"
-        : "-XEmptyCase"
-        : "-XEmptyDataDecls"
-        : "-XFlexibleContexts"
-        : "-XFlexibleInstances"
-        : "-XFunctionalDependencies"
-        : "-XGADTs"
-        : "-XGeneralizedNewtypeDeriving"
-        : "-XInstanceSigs"
-        : "-XKindSignatures"
-        : "-XLambdaCase"
-        : "-XNamedFieldPuns"
-        : "-XOverloadedStrings"
-        : "-XPolyKinds"
-        : "-XQuasiQuotes"
-        : "-XRankNTypes"
-        : "-XRecordWildCards"
-        : "-XScopedTypeVariables"
-        : "-XStandaloneDeriving"
-        : "-XTemplateHaskell"
-        : "-XTupleSections"
-        : "-XTypeApplications"
-        : "-XTypeFamilies"
-        : "-XTypeOperators"
-        : "-XUndecidableInstances"
-        : "-XRoleAnnotations"
-        : sourceFiles
-
+main = Test.DocTest.doctest ["--fast", "src"]
 
 {-# START_FILE README.md #-}
-# {{name}} [![GitHub CI](https://github.com/monadplus/{{name}}/workflows/CI/badge.svg)](https://github.com/monadplus/{{name}}/actions)
-
-## Building the project
-
-Cabal v2:
-
-```sh
-cabal update && cabal build
-```
-
-Stack:
-
-```sh
-stack build
-```
-
-Nix:
-
-```sh
-# Executable at ./result/bin/
-nix-build
-```
-
-Development environment:
-
-```sh
-
-```
-
-## Running the project
-
-Cabal v2:
-
-```sh
-cabal run
-```
-
-Stack:
-
-```sh
-stack run
-```
-
-Nix:
-
-```sh
-nix-build && ./result/bin/{{name}}
-```
-
-## CI
-
-Disabled for now.
-
-Nix+cachix is missing in this old template.
-
+# {{name}} [![Haskell CI](https://github.com/monadplus/{{name}}/actions/workflows/ci.yml/badge.svg)](https://github.com/monadplus/{{name}}/actions/workflows/ci.yml)
 
 {-# START_FILE Setup.hs #-}
 import Distribution.Simple
@@ -366,25 +265,6 @@ module Lib where
 todo :: IO ()
 todo = putStrLn "TODO"
 
-{-# START_FILE src/Lib/Internal.hs #-}
-module Lib.Internal (
-    mystery
-  ) where
-
--- $setup
--- >>> import Data.Monoid
-
--- |
--- >>> mystery 5
--- 5
---
--- >>> mystery 3
--- 0
-mystery :: Int -> Int
-mystery x = case x of
-  5 -> 5
-  _ -> 0
-
 {-# START_FILE nix/sources.json #-}
 {
     "gitignore.nix": {
@@ -393,10 +273,10 @@ mystery x = case x of
         "homepage": "",
         "owner": "hercules-ci",
         "repo": "gitignore.nix",
-        "rev": "9e80c4d83026fa6548bc53b1a6fab8549a6991f6",
-        "sha256": "04n9chlpbifgc5pa3zx6ff3rji9am6msrbn1z3x1iinjz2xjfp4p",
+        "rev": "bff2832ec341cf30acb3a4d3e2e7f1f7b590116a",
+        "sha256": "0va0janxvmilm67nbl81gdbpppal4aprxzb25gp9pqvf76ahxsci",
         "type": "tarball",
-        "url": "https://github.com/hercules-ci/gitignore.nix/archive/9e80c4d83026fa6548bc53b1a6fab8549a6991f6.tar.gz",
+        "url": "https://github.com/hercules-ci/gitignore.nix/archive/bff2832ec341cf30acb3a4d3e2e7f1f7b590116a.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "niv": {
@@ -405,10 +285,10 @@ mystery x = case x of
         "homepage": "https://github.com/nmattia/niv",
         "owner": "nmattia",
         "repo": "niv",
-        "rev": "65a61b147f307d24bfd0a5cd56ce7d7b7cc61d2e",
-        "sha256": "17mirpsx5wyw262fpsd6n6m47jcgw8k2bwcp1iwdnrlzy4dhcgqh",
+        "rev": "82e5cd1ad3c387863f0545d7591512e76ab0fc41",
+        "sha256": "090l219mzc0gi33i3psgph6s2pwsc8qy4lyrqjdj4qzkvmaj65a7",
         "type": "tarball",
-        "url": "https://github.com/nmattia/niv/archive/65a61b147f307d24bfd0a5cd56ce7d7b7cc61d2e.tar.gz",
+        "url": "https://github.com/nmattia/niv/archive/82e5cd1ad3c387863f0545d7591512e76ab0fc41.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "nixpkgs": {
@@ -417,13 +297,14 @@ mystery x = case x of
         "homepage": "",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "ee084c02040e864eeeb4cf4f8538d92f7c675671",
-        "sha256": "1x8amcixdaw3ryyia32pb706vzhvn5whq9n8jin0qcha5qnm1fnh",
+        "rev": "5643714dea562f0161529ab23058562afeff46d0",
+        "sha256": "1xs8h3jqi5fndy8b6x5i44a0l1qvbqwnsbs0is36fy6rwl8pdk8v",
         "type": "tarball",
-        "url": "https://github.com/NixOS/nixpkgs/archive/ee084c02040e864eeeb4cf4f8538d92f7c675671.tar.gz",
+        "url": "https://github.com/NixOS/nixpkgs/archive/5643714dea562f0161529ab23058562afeff46d0.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
+
 
 {-# START_FILE nix/sources.nix #-}
 # This file has been generated by Niv.
@@ -625,21 +506,41 @@ haskellPackagesNew: haskellPackagesOld:
 
 {-# START_FILE nix/sources/.gitkeep #-}
 
-{-# START_FILE test/Spec.hs #-}
-module Main (main) where
+{-# START_FILE tasty/Main.hs #-}
+module Main where
 
-import           System.IO  (hSetEncoding, stderr, stdout, utf8)
-import           Test.Hspec (Spec, hspec)
+import qualified Data.List as List
+import System.IO (hSetEncoding, stderr, stdout, utf8)
+import Test.Tasty
+import Test.Tasty.HUnit
+import Test.Tasty.SmallCheck as SC
 
 main :: IO ()
 main = do
-    hSetEncoding stdout utf8
-    hSetEncoding stderr utf8
+  hSetEncoding stdout utf8
+  hSetEncoding stderr utf8
+  defaultMain tests
 
-    hspec allUnitTests
-
-allUnitTests :: Spec
-allUnitTests = undefined
+tests, properties, unitTests, scProps :: TestTree
+tests =
+  testGroup
+    "Tests"
+    [ properties,
+      unitTests
+    ]
+properties = testGroup "Properties" [scProps]
+scProps =
+  testGroup
+    "(Checked by SmallCheck)"
+    [ SC.testProperty "sort == sort . reverse" $
+        \list -> List.sort (list :: [Int]) == List.sort (reverse list)
+    ]
+unitTests =
+  testGroup
+    "Unit tests"
+    [ testCase "2+2=4" $
+        2 + 2 @?= (4 :: Integer)
+    ]
 
 {-# START_FILE CHANGELOG.md #-}
 # Changelog
@@ -654,10 +555,6 @@ The changelog is available [on GitHub][2].
 [1]: https://pvp.haskell.org
 [2]: https://github.com/monadplus/{{name}}/releases
 
-{-# START_FILE stack.yaml #-}
-resolver: lts-18.13
-extra-deps: []
-
 {-# START_FILE benchmark/Benchmark.hs #-}
 import           Gauge.Main
 
@@ -669,123 +566,81 @@ main = defaultMain []
 
 {-# START_FILE .github/workflows/ci.yml #-}
 {{=<% %>=}}
-# Credit to kowainik for the original template
-name: CI
+
+name: Haskell CI
 
 on:
-  pull_request:
-    types: [synchronize, opened, reopened]
   push:
-    branches: [master]
-  # schedule:
-  #   # additionally run once per week (At 00:00 on Sunday) to maintain cache
-  #   - cron: '0 0 * * 0'
+    branches: [ main ]
+  pull_request:
+    types:
+      - opened
+      - synchronize
 
 jobs:
   cabal:
     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
+
     runs-on: ${{ matrix.os }}
+
     strategy:
-      matrix:
-        os: [ubuntu-latest, macOS-latest]
-        cabal: ["3.6"]
-        ghc:
-          - "8.8.4"
-          - "8.10.7"
-          - "9.0.1"
-          - "9.2"
-        exclude:
-          - os: macOS-latest
-            ghc: 8.8.4
-          - os: macOS-latest
-            ghc: 9.0.1
-          - os: macOS-latest
-            ghc: 9.2
+        matrix:
+          os: [ubuntu-latest]
+          cabal: ["3.6.2.0"]
+          ghc: ["8.10.7"]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
-    - uses: actions/setup-haskell@v1
+    - uses: haskell/actions/setup@v2
       id: setup-haskell-cabal
       name: Setup Haskell
       with:
         ghc-version: ${{ matrix.ghc }}
         cabal-version: ${{ matrix.cabal }}
 
-    - name: Configure
-      run: |
-        cabal configure --enable-tests --enable-benchmarks --enable-documentation --test-show-details=direct --write-ghc-environment-files=always
+    - run: cabal update
 
-    - name: Freeze
-      run: |
-        cabal freeze
+    - run: cabal configure --enable-tests --write-ghc-environment-files=always
 
-    - uses: actions/cache@v2
-      name: Cache ~/.cabal/store
+    - run: cabal freeze
+
+    - uses: actions/cache@v3
+      name: cache
       with:
-        path: ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+        path: |
+          ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+          dist-newstyle
         key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+        restore-keys: ${{ runner.os }}-${{ matrix.ghc }}-
 
-    - name: Install dependencies
-      run: |
-        cabal build all --only-dependencies
+    - name: dependencies
+      run: cabal build all --only-dependencies
 
-    - name: Build
-      run: |
-        cabal build all
+    - run: cabal build all
 
-    - name: Test
-      run: |
-        cabal test all
-
-    - name: Documentation
-      run: |
-        cabal haddock
-
-  stack:
-    name: stack / ghc ${{ matrix.ghc }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        stack: ["2.5"]
-        ghc: ["8.10.7"]
-
-    steps:
-    - uses: actions/checkout@v2
-
-    - uses: actions/setup-haskell@v1
-      name: Setup Haskell Stack
-      with:
-        ghc-version: ${{ matrix.ghc }}
-        stack-version: ${{ matrix.stack }}
-
-    - uses: actions/cache@v2
-      name: Cache ~/.stack
-      with:
-        path: ~/.stack
-        key: ${{ runner.os }}-${{ matrix.ghc }}-stack
-
-    - name: Build
-      run: |
-        stack build --system-ghc --test --bench --no-run-tests --no-run-benchmarks
-
-    - name: Test
-      run: |
-        stack test --system-ghc
+    - run: cabal test all
 
   nix:
     name: nix
+
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v2.4.0
-    - uses: cachix/install-nix-action@v15
+    - uses: actions/checkout@v3
+
+    - uses: cachix/install-nix-action@v17
       with:
         nix_path: nixpkgs=channel:nixos-unstable
+
     - uses: cachix/cachix-action@v10
       with:
         name: monadplus
+        # You need to set up this on the ./Settings/Secrets/Actions
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
     - run: nix-build | cachix push monadplus
+
     - run: nix-shell --run "echo OK"
 <%={{ }}=%>
 
@@ -802,4 +657,4 @@ updates:
       include: "scope"
     labels:
       - "CI"
-      - "library :books:"
+      - "dependencies"
